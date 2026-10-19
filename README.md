@@ -56,6 +56,12 @@ playwright install chromium
 
 > 未安装 Chromium 时插件仍可加载、消息收集正常，但渲染会失败并回退到文本摘要。
 
+> **htmlrender 0.8 及以上**改为可插拔渲染后端，需要额外选择 provider（0.5–0.7 无需配置）：
+> 在 `.env` 中设置 `RENDER__PROVIDER=playwright`，并确保 `playwright` 本体已安装
+> （`pip install playwright`）。浏览器内核默认安装到 htmlrender 自己的插件数据目录；
+> 若要沿用旧版 `~/Library/Caches/ms-playwright`（Windows: `%LOCALAPPDATA%\ms-playwright`）等
+> 已有缓存，可加 `RENDER__PROVIDER_CONFIG={"storage_path": "<缓存目录>"}`。
+
 ## 配置
 
 在 NoneBot 项目的 `.env` 中配置，键名前缀 `group_insight_`（大小写不敏感），**全部配置项均有默认值**，
@@ -232,7 +238,12 @@ group_insight_ai_model=deepseek-v4.1-flash
 
 1. 执行 `playwright install chromium` 安装浏览器内核
 2. 确认 htmlrender 依赖（playwright）安装完整
-3. 渲染失败时历史报告会回退为文本摘要，今天报告会提示渲染失败，可先按文本查看
+3. htmlrender **0.8.x** 需在 `.env` 设置 `RENDER__PROVIDER=playwright`，否则报
+   `CapabilityUnavailable: Capability render_html is not available in this composition`
+4. htmlrender **0.8.x** 需作为 NoneBot 插件加载（`nb plugin install nonebot-plugin-htmlrender`
+   或写入 `[tool.nonebot] plugins`），否则 Playwright 启动时报 `Cannot detect caller plugin`；
+   插件会在首次渲染前尝试自动补加载一次
+5. 渲染失败时历史报告会回退为文本摘要，今天报告会提示渲染失败，可先按文本查看
 
 </details>
 

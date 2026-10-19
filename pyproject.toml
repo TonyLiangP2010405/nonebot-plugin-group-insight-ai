@@ -1,6 +1,6 @@
 [project]
 name = "nonebot-plugin-group-insight-ai"
-version = "0.1.1"
+version = "0.1.2"
 description = "AI 驱动的群聊分析插件：群聊报告、词云生成、@消息追踪（移植自 Yunzai 插件 group-insight）"
 readme = "README.md"
 license = { text = "MIT" }

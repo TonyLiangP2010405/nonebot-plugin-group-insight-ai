@@ -9,6 +9,8 @@ import sys
 import types
 from datetime import datetime
 
+import pytest
+
 from nonebot_plugin_group_insight.analysis.statistics import StatisticsService
 from nonebot_plugin_group_insight.config import Config
 from nonebot_plugin_group_insight.render import report as report_module
@@ -387,3 +389,180 @@ async def test_html_to_image_fallback_when_html_to_pic_missing(monkeypatch):
 
     assert result == b"fallback-image"
     assert page.content == "<html>hi</html>"
+
+
+# ------------------------------------------------- htmlrender 0.8.x（render_html）
+
+
+class _FakeRenderedImage:
+    """仿 0.8.x 的 ``RenderedImage``：有 ``data`` 且实现 ``__bytes__``。"""
+
+    def __init__(self, data: bytes = b"rendered-image") -> None:
+        self.data = data
+        self.format = "png"
+
+    def __bytes__(self) -> bytes:
+        return self.data
+
+
+def _fake_08x_module(captured: dict, result: bytes = b"rendered-image"):
+    """构造带 0.8.x 新接口、且**没有** html_to_pic/get_new_page 的假模块。"""
+    fake_module = types.ModuleType("nonebot_plugin_htmlrender")
+
+    async def fake_render_html(html, **kwargs):
+        captured["html"] = html
+        captured.update(kwargs)
+        return _FakeRenderedImage(result)
+
+    fake_module.render_html = fake_render_html  # type: ignore[attr-defined]
+    return fake_module
+
+
+async def test_html_to_image_uses_render_html_on_08x(monkeypatch):
+    """0.8.x：html_to_pic 缺失但 render_html 存在时走新 API，整页由 height=None 表达。"""
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    captured: dict = {}
+    preflight: list[bool] = []
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", _fake_08x_module(captured))
+    monkeypatch.setattr(templates_module, "_ensure_htmlrender_plugin_loaded", lambda: preflight.append(True))
+
+    result = await templates_module.html_to_image(
+        "<html>0.8</html>", viewport={"width": 1320, "height": 1000}, img_type="png", quality=100, wait=300
+    )
+
+    assert result == b"rendered-image"
+    assert preflight == [True]  # 渲染前尝试把 htmlrender 注册为插件
+    assert captured["html"] == "<html>0.8</html>"
+    assert captured["width"] == 1320
+    assert captured["height"] is None  # full_page=True → 内部整页截图
+    assert captured["image_format"] == "png"
+    assert captured["quality"] is None  # RasterOptions 拒绝 png + quality
+    assert "template_path" not in captured  # 新 API 不接收旧参数
+    assert "base_url" not in captured  # 模板无相对引用，不传 base_url
+
+
+async def test_html_to_image_08x_jpeg_keeps_quality(monkeypatch):
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    captured: dict = {}
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", _fake_08x_module(captured))
+
+    await templates_module.html_to_image(
+        "<html>jpeg</html>", viewport={"width": 840, "height": 600}, img_type="jpeg", quality=80
+    )
+
+    assert captured["image_format"] == "jpeg"
+    assert captured["quality"] == 80
+    assert captured["height"] is None
+
+
+async def test_html_to_image_08x_fixed_viewport_when_not_full_page(monkeypatch):
+    """full_page=False 时把视口高度交给 height（0.8.x 传高度即关闭整页截图）。"""
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    captured: dict = {}
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", _fake_08x_module(captured))
+
+    await templates_module.html_to_image(
+        "<html>fixed</html>", viewport={"width": 840, "height": 600}, full_page=False
+    )
+
+    assert captured["width"] == 840
+    assert captured["height"] == 600
+
+
+async def test_html_to_image_prefers_html_to_pic_when_both_apis_exist(monkeypatch):
+    """同时存在两套接口时优先用 0.5–0.7 的 html_to_pic。"""
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    captured: dict = {}
+
+    async def fake_html_to_pic(**kwargs):
+        captured["html_to_pic"] = kwargs
+        return b"old-api"
+
+    fake_module = _fake_08x_module({}, result=b"new-api")
+    fake_module.html_to_pic = fake_html_to_pic  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", fake_module)
+
+    result = await templates_module.html_to_image("<html>both</html>", viewport={"width": 840, "height": 600})
+
+    assert result == b"old-api"
+    assert captured["html_to_pic"]["viewport"] == {"width": 840, "height": 600}
+
+
+async def test_render_report_works_with_08x_api(monkeypatch):
+    """端到端（mock）：报告渲染在 0.8.x 接口下也能拿到图片 bytes。"""
+    captured: dict = {}
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", _fake_08x_module(captured))
+
+    config = Config()
+    image = await render_report(build_template_data(sample_analysis(), group_name="测试群"), config)
+
+    assert image == b"rendered-image"
+    assert captured["width"] == REPORT_TEMPLATE_VIEWPORTS["default"]
+    assert captured["height"] is None
+    assert "群聊分析报告" in captured["html"]
+
+
+async def test_html_to_image_08x_logs_setup_hint_on_missing_provider(monkeypatch):
+    """0.8.x 常见配置错误 → 记录可操作提示，异常照常抛出（调用方仍走兜底）。"""
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    warnings: list[str] = []
+
+    class _Recorder:
+        def debug(self, message):
+            pass
+
+        def warning(self, message):
+            warnings.append(message)
+
+    async def failing_render_html(html, **kwargs):
+        raise RuntimeError("Capability `render_html` is not available in this composition.")
+
+    fake_module = types.ModuleType("nonebot_plugin_htmlrender")
+    fake_module.render_html = failing_render_html  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", fake_module)
+    monkeypatch.setattr(templates_module, "logger", _Recorder())
+    monkeypatch.setattr(templates_module, "_ensure_htmlrender_plugin_loaded", lambda: None)
+
+    with pytest.raises(RuntimeError):
+        await templates_module.html_to_image("<html></html>", viewport={"width": 840, "height": 600})
+
+    assert len(warnings) == 1
+    assert "RENDER__PROVIDER" in warnings[0]
+
+
+def test_log_08x_setup_hint_matches_known_failures(monkeypatch):
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    warnings: list[str] = []
+
+    class _Recorder:
+        def warning(self, message):
+            warnings.append(message)
+
+    monkeypatch.setattr(templates_module, "logger", _Recorder())
+
+    templates_module._log_08x_setup_hint(RuntimeError("Playwright startup failed. Caused by RuntimeError: Cannot detect caller plugin"))
+    templates_module._log_08x_setup_hint(RuntimeError("Capability `render_html` is not available in this composition."))
+    templates_module._log_08x_setup_hint(RuntimeError("其它错误"))
+
+    assert len(warnings) == 2
+    assert "插件" in warnings[0]
+    assert "RENDER__PROVIDER" in warnings[1]
+
+
+def test_ensure_htmlrender_plugin_loaded_never_raises(monkeypatch):
+    """NoneBot 未初始化或插件加载失败时都必须静默返回（不引入新的失败路径）。"""
+    import nonebot
+
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    def boom(name):
+        raise RuntimeError(f'Cannot load plugin "{name}"!')
+
+    monkeypatch.setattr(nonebot, "require", boom)
+    templates_module._ensure_htmlrender_plugin_loaded()
