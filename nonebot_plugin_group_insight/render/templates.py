@@ -161,11 +161,33 @@ async def _render_html_08x(
             quality=quality,
         )
     except Exception as error:
-        _log_08x_setup_hint(error)
-        raise
+        if _is_pixel_limit_error(error):
+            # 默认 2x 分辨率下长报告会超过 0.8.x 的 16Mi 像素预算，降到 1x 重试一次
+            logger.warning(f"渲染超出像素预算，降低分辨率重试: {error}")
+            try:
+                image = await render_html(
+                    html,
+                    width=viewport["width"],
+                    height=None if full_page else viewport["height"],
+                    image_format=img_type,
+                    quality=quality,
+                    device_pixel_ratio=1.0,
+                )
+            except Exception as retry_error:
+                _log_08x_setup_hint(retry_error)
+                raise
+        else:
+            _log_08x_setup_hint(error)
+            raise
 
     # RenderedImage 实现 __bytes__（返回 .data）
     return bytes(image)
+
+
+def _is_pixel_limit_error(error: Exception) -> bool:
+    """0.8.x 像素预算超限（``max_pixels`` 默认 16Mi 物理像素）。"""
+    message = str(error)
+    return "pixels" in message and "limit" in message
 
 
 # 0.8.x 的两个必配项（0.7 及以前不需要），命中时给出可操作的提示
@@ -179,6 +201,10 @@ _08X_SETUP_HINTS: tuple[tuple[str, str], ...] = (
         "not available in this composition",
         "htmlrender 0.8.x 需在 .env 配置渲染 provider（RENDER__PROVIDER=playwright），"
         "并安装 playwright 与浏览器（python -m playwright install chromium）",
+    ),
+    (
+        "exceeding the configured limit",
+        "图片超过 htmlrender 0.8.x 的像素预算，可在 .env 调高：RENDER__HTML__MAX_PIXELS=64000000",
     ),
 )
 

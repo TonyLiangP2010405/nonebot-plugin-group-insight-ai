@@ -566,3 +566,33 @@ def test_ensure_htmlrender_plugin_loaded_never_raises(monkeypatch):
 
     monkeypatch.setattr(nonebot, "require", boom)
     templates_module._ensure_htmlrender_plugin_loaded()
+
+
+async def test_html_to_image_08x_retries_with_lower_dpr_on_pixel_limit(monkeypatch):
+    """0.8.x 像素预算超限时自动降 device_pixel_ratio=1.0 重试。"""
+    import types
+
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    calls = []
+
+    class FakeImage:
+        def __bytes__(self):
+            return b"image-data"
+
+    async def fake_render_html(html, **kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise RuntimeError("Rendered image contains 21295680 physical pixels, exceeding the configured limit of 16777216.")
+        return FakeImage()
+
+    fake_module = types.ModuleType("nonebot_plugin_htmlrender")
+    fake_module.render_html = fake_render_html
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", fake_module)
+
+    result = await templates_module.html_to_image("<html>long</html>", viewport={"width": 840, "height": 600})
+
+    assert result == b"image-data"
+    assert len(calls) == 2
+    assert "device_pixel_ratio" not in calls[0]
+    assert calls[1]["device_pixel_ratio"] == 1.0
