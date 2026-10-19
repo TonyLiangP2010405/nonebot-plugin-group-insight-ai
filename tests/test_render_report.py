@@ -345,3 +345,45 @@ def test_send_text_summary_handles_missing_report_and_string_sender():
 
     text = send_text_summary({"goldenQuotes": [{"quote": "q", "sender": {"user_id": "1001"}}]}, "今天", "2023-11-14")
     assert '1. "q" —— 1001\n' in text
+
+
+class _FakePage:
+    def __init__(self):
+        self.content = None
+
+    async def set_content(self, html, wait_until=None):
+        self.content = html
+
+    async def wait_for_timeout(self, ms):
+        pass
+
+    async def screenshot(self, full_page=True, type="png", quality=None):
+        return b"fallback-image"
+
+
+class _FakePageCtx:
+    def __init__(self, page):
+        self._page = page
+
+    async def __aenter__(self):
+        return self._page
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+async def test_html_to_image_fallback_when_html_to_pic_missing(monkeypatch):
+    """旧版 nonebot-plugin-htmlrender 无 html_to_pic 时回退 get_new_page 截图。"""
+    import types
+
+    from nonebot_plugin_group_insight.render import templates as templates_module
+
+    page = _FakePage()
+    fake_module = types.ModuleType("nonebot_plugin_htmlrender")
+    fake_module.get_new_page = lambda **kwargs: _FakePageCtx(page)
+    monkeypatch.setitem(sys.modules, "nonebot_plugin_htmlrender", fake_module)
+
+    result = await templates_module.html_to_image("<html>hi</html>", viewport={"width": 840, "height": 600})
+
+    assert result == b"fallback-image"
+    assert page.content == "<html>hi</html>"

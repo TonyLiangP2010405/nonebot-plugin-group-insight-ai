@@ -59,12 +59,24 @@ async def html_to_image(
 
     htmlrender 在导入时即读取 NoneBot 配置，因此这里懒导入；未安装或未初始化时抛出的异常
     由调用方捕获（渲染失败走文本兜底）。
-    """
-    from nonebot_plugin_htmlrender import html_to_pic
 
+    旧版 nonebot-plugin-htmlrender 没有 ``html_to_pic``，回退到 ``get_new_page`` 手动截图。
+    """
     if img_type != "jpeg":
         # Playwright 不接受 png 截图携带 quality（原作 puppeteer 直接忽略该参数）
         quality = None
+
+    try:
+        from nonebot_plugin_htmlrender import html_to_pic
+    except ImportError:
+        return await _html_to_image_fallback(
+            html,
+            viewport=viewport,
+            img_type=img_type,
+            quality=quality,
+            wait=wait,
+            full_page=full_page,
+        )
 
     return await html_to_pic(
         html=html,
@@ -76,3 +88,22 @@ async def html_to_image(
         quality=quality,
         full_page=full_page,
     )
+
+
+async def _html_to_image_fallback(
+    html: str,
+    *,
+    viewport: dict[str, int],
+    img_type: str,
+    quality: int | None,
+    wait: int,
+    full_page: bool,
+) -> bytes:
+    """旧版 htmlrender（无 ``html_to_pic``）的截图实现。"""
+    from nonebot_plugin_htmlrender import get_new_page
+
+    async with get_new_page(viewport=viewport) as page:
+        await page.set_content(html, wait_until="networkidle")
+        if wait:
+            await page.wait_for_timeout(wait)
+        return await page.screenshot(full_page=full_page, type=img_type, quality=quality)
