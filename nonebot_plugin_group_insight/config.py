@@ -30,6 +30,9 @@ class Config(BaseModel, extra="ignore"):
     group_insight_ai_llm_timeout: float = 100
     group_insight_ai_llm_retries: int = 2
     group_insight_ai_llm_backoff: float = 2
+    # OpenCode Go 等服务商要求的会话头（x-opencode-session）；留空时若 base_url
+    # 指向 opencode.ai 则按 API Key 自动生成稳定 ID
+    group_insight_ai_session_id: str = ""
 
     # ---- 分析 ----
     group_insight_topic_enabled: bool = True

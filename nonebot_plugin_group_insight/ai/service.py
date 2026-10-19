@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Any
 
 from nonebot.log import logger
@@ -14,6 +15,24 @@ from nonebot.log import logger
 from ..config import Config, get_config
 
 DEFAULT_LLM_TIMEOUT = 100
+PLUGIN_VERSION = "0.1.3"
+
+
+def _build_default_headers(config: Config, api_key: str) -> dict[str, str]:
+    """构造客户端默认请求头。
+
+    OpenCode Go（``opencode.ai``）要求 ``x-opencode-session`` 头做路由亲和与
+    prompt 缓存，缺了会被 400 拒绝（MissingSessionID）；并要求客户端用自己的
+    User-Agent 而不是通用 SDK 名。session id 未配置时按 API Key 生成稳定 UUID，
+    保证跨重启不变。
+    """
+    headers = {"User-Agent": f"nonebot-plugin-group-insight/{PLUGIN_VERSION}"}
+    session_id = config.group_insight_ai_session_id
+    if not session_id and "opencode.ai" in (config.group_insight_ai_base_url or ""):
+        session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"group-insight:{api_key}"))
+    if session_id:
+        headers["x-opencode-session"] = session_id
+    return headers
 
 
 def _format_seconds(value: float) -> str:
@@ -66,6 +85,7 @@ class AIService:
                 api_key=self.api_key,
                 base_url=self.base_url or None,
                 timeout=self.timeout,
+                default_headers=_build_default_headers(self.config, self.api_key),
             )
         except Exception as e:  # pragma: no cover - SDK 构造失败极少见
             logger.opt(exception=e).error("AI 客户端初始化失败")

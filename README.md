@@ -71,9 +71,13 @@ playwright install chromium
 
 ```env
 group_insight_ai_api_key=你的OpenCode-Go-API-Key
-group_insight_ai_base_url=https://opencode.ai/zen/go/v1
+group_insight_ai_base_url=https://opencode.ai/inference/go/openai/v1
 group_insight_ai_model=deepseek-v4.1-flash
 ```
+
+OpenCode Go 要求请求携带 `x-opencode-session` 会话头（用于路由与 prompt 缓存），
+插件会在 base_url 指向 `opencode.ai` 时**自动生成稳定的会话 ID**，无需手动配置；
+需要自定义时可设 `group_insight_ai_session_id`。
 
 兼容任何 OpenAI 格式服务商（OpenAI / DeepSeek / 通义千问 / 智谱 / 硅基流动 / OpenCode Go 等），
 只需填写对应的 `api_key`、`base_url` 与 `model`。留空 `ai_api_key` 时话题 / 金句 / 称号分析与定时报告停用，
@@ -95,6 +99,7 @@ group_insight_ai_model=deepseek-v4.1-flash
 | `group_insight_ai_llm_timeout` | `100` | 单次 AI 调用超时（秒） |
 | `group_insight_ai_llm_retries` | `2` | AI 调用失败重试次数（共 3 次尝试） |
 | `group_insight_ai_llm_backoff` | `2` | 重试退避基数（秒，第 n 次等待 n × backoff） |
+| `group_insight_ai_session_id` | `""` | `x-opencode-session` 会话头（OpenCode Go 必填；留空且 base_url 指向 opencode.ai 时自动生成稳定 ID） |
 | `group_insight_topic_enabled` | `true` | 启用话题提取 |
 | `group_insight_golden_quote_enabled` | `true` | 启用金句提取 |
 | `group_insight_max_golden_quotes` | `5` | 金句最大条数 |

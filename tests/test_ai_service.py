@@ -175,3 +175,58 @@ async def test_init_uses_custom_base_url():
 
     assert await service.init() is True
     assert str(service.client.base_url).rstrip("/") == "https://opencode.ai/zen/go/v1"
+
+
+def test_build_default_headers_opencode_auto_session():
+    """opencode.ai 端点自动生成稳定的 x-opencode-session。"""
+    from nonebot_plugin_group_insight.ai.service import _build_default_headers
+
+    config = Config(group_insight_ai_base_url="https://opencode.ai/inference/go/openai/v1")
+    h1 = _build_default_headers(config, "sk-test")
+    h2 = _build_default_headers(config, "sk-test")
+    assert h1["x-opencode-session"] == h2["x-opencode-session"]
+    assert h1["x-opencode-session"]
+    assert h1["User-Agent"].startswith("nonebot-plugin-group-insight/")
+
+
+def test_build_default_headers_explicit_session_id():
+    from nonebot_plugin_group_insight.ai.service import _build_default_headers
+
+    config = Config(
+        group_insight_ai_base_url="https://opencode.ai/inference/go/openai/v1",
+        group_insight_ai_session_id="my-session",
+    )
+    assert _build_default_headers(config, "sk-test")["x-opencode-session"] == "my-session"
+
+
+def test_build_default_headers_non_opencode_no_session():
+    from nonebot_plugin_group_insight.ai.service import _build_default_headers
+
+    config = Config(group_insight_ai_base_url="https://api.deepseek.com/v1")
+    assert "x-opencode-session" not in _build_default_headers(config, "sk-test")
+
+
+async def test_init_passes_default_headers(monkeypatch):
+    """init 把 default_headers 传给 AsyncOpenAI。"""
+    import sys
+    import types
+
+    captured = {}
+
+    class FakeAsyncOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    fake_openai = types.ModuleType("openai")
+    fake_openai.AsyncOpenAI = FakeAsyncOpenAI
+    monkeypatch.setitem(sys.modules, "openai", fake_openai)
+
+    service = AIService(
+        Config(
+            group_insight_ai_api_key="sk-test",
+            group_insight_ai_base_url="https://opencode.ai/inference/go/openai/v1",
+        )
+    )
+    assert await service.init() is True
+    headers = captured["default_headers"]
+    assert "x-opencode-session" in headers
