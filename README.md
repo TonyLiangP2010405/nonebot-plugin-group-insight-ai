@@ -1,4 +1,4 @@
-# nonebot-plugin-group-insight
+# nonebot-plugin-group-insight-ai
 
 AI 驱动的群聊洞察插件（NoneBot2）：**群聊报告**、**词云生成**、**@ 消息追踪**。
 
@@ -36,7 +36,7 @@ nonebot-adapter-onebot(v11) + SQLite + nonebot-plugin-htmlrender + openai SDK。
 ## 安装
 
 ```bash
-pip install nonebot-plugin-group-insight
+pip install nonebot-plugin-group-insight-ai
 ```
 
 在 NoneBot 项目中使用：
