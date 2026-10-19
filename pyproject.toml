@@ -1,0 +1,74 @@
+[project]
+name = "nonebot-plugin-group-insight"
+version = "0.1.0"
+description = "AI 驱动的群聊分析插件：群聊报告、词云生成、@消息追踪（移植自 Yunzai 插件 group-insight）"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+    { name = "TonyLiangP2010405", email = "plia0974@uni.sydney.edu.au" },
+]
+keywords = ["nonebot", "nonebot2", "plugin", "group", "analysis", "wordcloud", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "nonebot2>=2.2.0",
+    "nonebot-adapter-onebot>=2.4.0",
+    "nonebot-plugin-localstore>=0.7.0",
+    "nonebot-plugin-apscheduler>=0.5.0",
+    "nonebot-plugin-htmlrender>=0.5.0",
+    "openai>=1.0.0",
+    "jieba>=0.42.1",
+    "json-repair>=0.30.0",
+    "aiosqlite>=0.19.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "nonebot2[fastapi]>=2.2.0",
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "nonebug>=0.3",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/TonyLiangP2010405/nonebot-plugin-group-insight"
+Repository = "https://github.com/TonyLiangP2010405/nonebot-plugin-group-insight"
+
+[tool.nonebot]
+plugins = ["nonebot_plugin_group_insight"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nonebot_plugin_group_insight"]
+# resources 由下面的 force-include 单独映射，避免被包目录默认扫描重复收录
+exclude = ["nonebot_plugin_group_insight/resources/**"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"nonebot_plugin_group_insight/resources" = "nonebot_plugin_group_insight/resources"
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# 与 nonebug 的会话级异步 fixture 保持一致（否则 ScopeMismatch）
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
